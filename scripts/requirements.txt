@@ -1,0 +1,15 @@
+# Log Analysis Script Dependencies
+# Install: pip install -r requirements.txt
+
+# Note: All functionality uses Python standard library
+# No additional packages needed!
+
+# Python 3.8+ built-in modules:
+# - json: JSON parsing
+# - argparse: Command line argument handling
+# - collections: defaultdict, Counter
+# - datetime: Time handling
+# - statistics: Statistical calculations
+
+# Optional (for colored output):
+# colorama>=0.4.6

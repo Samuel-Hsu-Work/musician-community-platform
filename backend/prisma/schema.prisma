@@ -1,0 +1,197 @@
+// Prisma Schema
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// User & Account Models
+// ============================================================================
+
+// Login identity — authentication only
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      String   @default("user") // user | admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  preferences        UserPreferences?
+  learningCategories UserLearningCategory[]
+  topics             Topic[]
+  topicLikes   TopicLike[]
+  comments     Comment[]
+  commentLikes CommentLike[]
+
+  @@map("users")
+}
+
+// Reserved after account deletion — username cannot be re-registered until heldUntil
+model UsernameHold {
+  id            String   @id @default(cuid())
+  usernameLower String   @unique
+  heldUntil     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([heldUntil])
+  @@map("username_holds")
+}
+
+// Settings — language and timezone
+model UserPreferences {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  language           String    @default("en")
+  timezone           String    @default("UTC")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ============================================================================
+// Forum Models
+// ============================================================================
+
+model Topic {
+  id             String   @id @default(cuid())
+  date           String
+  title          String
+  content        String
+  type           String   @default("daily_discussion") // daily_discussion | community_post
+  hidden         Boolean  @default(false)
+  userId         String?
+  authorUsername String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user     User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  comments Comment[]
+  likes    TopicLike[]
+
+  @@map("topics")
+}
+
+model TopicLike {
+  id        String   @id @default(cuid())
+  topicId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, userId])
+  @@map("topic_likes")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  topicId   String
+  userId    String?
+  username  String
+  text      String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topic   Topic         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user    User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[]     @relation("CommentReplies")
+  likes   CommentLike[]
+
+  @@map("comments")
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@map("comment_likes")
+}
+
+// ============================================================================
+// Theory — canonical notation reference text (sidebar catalog stays in frontend)
+// ============================================================================
+
+model NotationDefinition {
+  id                 String   @id // matches theory catalog id, e.g. "staff"
+  name               String
+  category           String
+  standardDefinition String   @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("notation_definitions")
+}
+
+// How AI should explain theory from each learning-style angle
+model ExplanationCategory {
+  id          String   @id // slug, e.g. "art"
+  label       String
+  shortLabel  String
+  icon        String
+  description String
+  aiGuidance  String   @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users    UserLearningCategory[]
+  insights ExplanationCategoryInsight[]
+
+  @@map("explanation_categories")
+}
+
+// User-selected learning-style categories (Theory AI personalization)
+model UserLearningCategory {
+  id         String   @id @default(cuid())
+  userId     String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category ExplanationCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+  @@map("user_learning_categories")
+}
+
+// AI learning table — Forum high-like content → agent → approved insights per topic + style
+model ExplanationCategoryInsight {
+  id              String   @id @default(cuid())
+  theoryTopicId   String   // catalog id, e.g. major-triad
+  categoryId      String
+  title           String
+  content         String   @db.Text // display text on Theory UI
+  promptSummary   String   @db.Text // distilled angle injected into AI prompt
+  sourceType      String   // forum_topic | forum_comment
+  sourceRef       String   @unique // topic id or comment id — one insight per source
+  sourceLikeCount Int      @default(0)
+  status          String   @default("draft") // draft | approved | rejected
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  category ExplanationCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([theoryTopicId, categoryId, status])
+  @@index([status])
+  @@map("explanation_category_insights")
+}

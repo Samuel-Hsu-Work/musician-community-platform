@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+
+# Local env (also covered in subproject .gitignore files)
+.env
+.env.local
+.env.*.local
