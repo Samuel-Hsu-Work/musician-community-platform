@@ -15,14 +15,14 @@ Python worker for MusicTalks that triggers one AI daily discussion topic per UTC
    pip install -r requirements.txt
    ```
 
-2. **Set up environment variables**:
+3. **Set up environment variables**:
    Create a `.env` file in the python-worker directory (copy from `.env.example`):
    ```bash
    cp .env.example .env
    # Edit .env — CRON_SECRET must match backend's CRON_SECRET
    ```
 
-3. **Run the worker**:
+4. **Run the worker**:
    ```bash
    # Make sure virtual environment is activated
    source venv/bin/activate  # On Windows: venv\Scripts\activate

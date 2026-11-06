@@ -21,7 +21,7 @@ High-level map of MusicTalks — **what each part does** and **how responsibilit
 ```
 
 - **Frontend** owns presentation and static Theory catalogs (`theoryDomainConfig.ts`, per-domain `*Data.ts` files, `scaleData.ts`).
-- **Backend** owns auth, Forum persistence, and AI endpoints.
+- **Backend** owns auth, all persistence (Forum, standard definitions, learning styles, AI learning table), AI endpoints, and admin APIs. It keeps a mirror of the Theory topic catalog in `backend/src/data/theoryTopicCatalog.ts` — see [music-talks/app/theory/README.md](../music-talks/app/theory/README.md).
 - **Python worker** only triggers AI topic generation; it does not touch the database directly.
 
 ## Product areas & responsibility split
@@ -79,6 +79,18 @@ Minimal identity model (Scheme A):
 
 Username is **denormalized** into Forum (`Topic.authorUsername`, `Comment.username`) for display. Changing username batch-updates forum rows.
 
+### Admin (`/admin/*`)
+
+Visible only to `User.role = admin`; every `/api/admin/*` route runs `authenticate` + `requireAdmin`. `AdminShell` on the frontend is a convenience guard, not the security boundary.
+
+| Page | Purpose |
+|------|---------|
+| `/admin/forum` | Hide / unhide Forum topics (`Topic.hidden`) |
+| `/admin/users` | Promote / demote users |
+| `/admin/theory` | Edit standard definitions in `notation_definitions` |
+| `/admin/learning` | Run the forum insight pipeline; approve / reject draft insights |
+| `/admin/learning-table` | Topic × learning-style matrix of AI learning-table rows |
+
 ## Backend layering
 
 ```
@@ -102,9 +114,10 @@ Put permission checks in **services**, not only in controllers, so rules stay in
 | Feature | Endpoint | Trigger |
 |---------|----------|---------|
 | Daily discussion topic | `POST /api/cron/generate-topic` | Python worker (daily 00:00 UTC; one topic per UTC date) |
-| Notation explanation | `POST /api/ai/explain-notation` | User selects notation in Theory |
+| Theory explanation | `POST /api/ai/explain-notation` | User requests an AI explanation for a Theory topic (prompt includes learning style + approved learning-table rows) |
+| Forum → AI learning table | `POST /api/admin/forum-insights/run` or `POST /api/cron/process-forum-insights` | Admin button at `/admin/learning`, or an external scheduler (none configured in this repo) — see [ADR 008](./decisions/008-forum-ai-learning-pipeline.md) |
 
-Both use OpenAI via `backend/src/services/ai.service.ts` when `OPENAI_API_KEY` is set; cron falls back to a default topic if missing.
+All use OpenAI through the Vercel AI SDK (`ai.service.ts`, `forumInsightPipeline.service.ts`) when `OPENAI_API_KEY` is set; the daily-topic cron falls back to a fixed default topic if it is missing.
 
 ## What belongs where (checklist)
 
