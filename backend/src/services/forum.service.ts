@@ -339,9 +339,12 @@ export class ForumService {
   ) {
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
+      include: { topic: { select: { hidden: true } } },
     });
 
-    if (!comment) {
+    // A comment on a hidden topic is not found: the edit response includes the
+    // thread's replies, so editing must not become a way to read a moderated thread.
+    if (!comment || comment.topic.hidden) {
       throw new Error('Comment not found');
     }
 

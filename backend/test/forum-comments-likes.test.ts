@@ -585,6 +585,32 @@ describe('hidden (moderated) topics', () => {
     expect(await prisma.comment.count({ where: { topicId: topic.id } })).toBe(1);
   });
 
+  it("rejects editing a comment on a hidden topic without revealing other users' replies", async () => {
+    // The edit response carries the comment's replies, so it must not become a way
+    // to read a moderated thread.
+    const { topic, comment, commenter } = await arrangeHiddenThread();
+    const replier = await registerUser();
+    const reply = await prisma.comment.create({
+      data: {
+        topicId: topic.id,
+        userId: replier.id,
+        username: replier.username,
+        text: 'Reply posted before moderation',
+        parentId: comment.id,
+      },
+    });
+
+    const res = await client()
+      .patch(`/api/forum/comments/${comment.id}`)
+      .set(...bearer(commenter))
+      .send({ text: 'Edited after moderation' });
+
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain(reply.text);
+    const stored = await prisma.comment.findUniqueOrThrow({ where: { id: comment.id } });
+    expect(stored.text).toBe('Visible before moderation');
+  });
+
   it('rejects likes on a hidden topic and on its comments without storing them', async () => {
     const { topic, comment } = await arrangeHiddenThread();
     const member = await registerUser();
