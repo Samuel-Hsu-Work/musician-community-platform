@@ -39,7 +39,7 @@ export const runForumInsightPipeline = async (_req: Request, res: Response) => {
     console.error('Error in runForumInsightPipeline:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Pipeline failed',
+      error: 'Pipeline failed',
     });
   }
 };
@@ -317,6 +317,13 @@ export const updateTheoryTopic = async (req: Request, res: Response) => {
 
     if (!id?.trim()) {
       return res.status(400).json({ error: 'Topic ID is required' });
+    }
+
+    const nonStringField = Object.entries({ name, category, standardDefinition }).find(
+      ([, value]) => value !== undefined && typeof value !== 'string'
+    );
+    if (nonStringField) {
+      return res.status(400).json({ error: `${nonStringField[0]} must be a string` });
     }
 
     const updated = await adminTheoryService.updateTopic(id, {

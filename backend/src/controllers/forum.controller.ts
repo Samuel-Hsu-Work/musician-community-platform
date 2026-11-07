@@ -37,7 +37,7 @@ export const getLatestTopic = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in getLatestTopic controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to fetch latest discussion topic',
+      error: 'Failed to fetch latest discussion topic',
     });
   }
 };
@@ -60,7 +60,7 @@ export const getTopicById = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in getTopicById controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to fetch topic',
+      error: 'Failed to fetch topic',
     });
   }
 };
@@ -95,7 +95,7 @@ export const getAllTopics = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in getAllTopics controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to fetch topics',
+      error: 'Failed to fetch topics',
     });
   }
 };
@@ -125,9 +125,13 @@ export const getComments = async (req: Request, res: Response) => {
       totalComments: result.totalComments,
     });
   } catch (error: any) {
+    if (error.message === 'Topic not found') {
+      return res.status(404).json({ error: 'Topic not found' });
+    }
+
     console.error('Error in getComments controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to fetch comments',
+      error: 'Failed to fetch comments',
     });
   }
 };
@@ -156,7 +160,6 @@ export const createComment = async (req: Request, res: Response) => {
     const comment = await forumService.createComment(
       topicId,
       req.user.userId,
-      req.user.username,
       text,
       parentId ?? undefined
     );
@@ -167,6 +170,10 @@ export const createComment = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error in createComment controller:', error);
+
+    if (error.message === 'User not found') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     if (error.message === 'Topic not found') {
       return res.status(404).json({ error: 'Topic not found' });
@@ -180,7 +187,7 @@ export const createComment = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to create comment',
+      error: 'Failed to create comment',
     });
   }
 };
@@ -223,7 +230,7 @@ export const updateComment = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to update comment',
+      error: 'Failed to update comment',
     });
   }
 };
@@ -259,7 +266,7 @@ export const deleteComment = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to delete comment',
+      error: 'Failed to delete comment',
     });
   }
 };
@@ -288,12 +295,7 @@ export const createTopic = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Content is too long (max 5000 characters)' });
     }
 
-    const topic = await forumService.createUserTopic(
-      req.user.userId,
-      req.user.username,
-      title,
-      content
-    );
+    const topic = await forumService.createUserTopic(req.user.userId, title, content);
 
     return res.status(201).json({
       success: true,
@@ -301,8 +303,13 @@ export const createTopic = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error in createTopic controller:', error);
+
+    if (error.message === 'User not found') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     return res.status(500).json({
-      error: error.message || 'Failed to create community post',
+      error: 'Failed to create community post',
     });
   }
 };
@@ -329,7 +336,7 @@ export const getMyTopics = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in getMyTopics controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to fetch your posts',
+      error: 'Failed to fetch your posts',
     });
   }
 };
@@ -387,7 +394,7 @@ export const updateTopic = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to update post',
+      error: 'Failed to update post',
     });
   }
 };
@@ -423,7 +430,7 @@ export const deleteTopic = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to delete post',
+      error: 'Failed to delete post',
     });
   }
 };
@@ -462,7 +469,7 @@ export const toggleTopicLike = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to toggle like',
+      error: 'Failed to toggle like',
     });
   }
 };
@@ -501,7 +508,7 @@ export const toggleCommentLike = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({
-      error: error.message || 'Failed to toggle like',
+      error: 'Failed to toggle like',
     });
   }
 };

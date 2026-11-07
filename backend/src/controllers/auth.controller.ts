@@ -13,8 +13,14 @@ export const register = async (req: Request, res: Response) => {
 
     // Step 2: Validate input (basic validation)
     if (!username || !email || !password) {
-      return res.status(400).json({ 
-        error: 'Username, email, and password are required' 
+      return res.status(400).json({
+        error: 'Username, email, and password are required'
+      });
+    }
+
+    if (typeof username !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({
+        error: 'Username, email, and password must be strings',
       });
     }
 
@@ -81,6 +87,13 @@ export const checkRegisterAvailability = async (req: Request, res: Response) => 
       return res.status(400).json({
         error: 'Provide username and/or email to check',
       });
+    }
+
+    if (
+      (username !== undefined && typeof username !== 'string') ||
+      (email !== undefined && typeof email !== 'string')
+    ) {
+      return res.status(400).json({ error: 'Username and email must be strings' });
     }
 
     const result = await authService.checkRegisterAvailability(username, email);

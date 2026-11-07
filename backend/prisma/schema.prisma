@@ -39,6 +39,9 @@ model UsernameHold {
   id            String   @id @default(cuid())
   usernameLower String   @unique
   heldUntil     DateTime
+  /// User who gave up the name by renaming; they may take it back during the hold.
+  /// Null for names released by account deletion. No FK: the user may later be deleted.
+  releasedByUserId String?
   createdAt     DateTime @default(now())
 
   @@index([heldUntil])

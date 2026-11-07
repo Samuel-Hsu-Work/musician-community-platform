@@ -114,12 +114,23 @@ export class AdminTheoryService {
       throw new Error('Topic not found');
     }
 
-    const name = data.name?.trim() || catalogEntry.name;
-    const category = data.category?.trim() || catalogEntry.category;
-
     if (!data.standardDefinition?.trim()) {
       throw new Error('standardDefinition is required');
     }
+
+    // Omitted fields keep their stored value; blank ones reset to the catalog default.
+    const stored = await prisma.notationDefinition.findUnique({
+      where: { id: topicId },
+      select: { name: true, category: true },
+    });
+    const name =
+      data.name === undefined
+        ? stored?.name ?? catalogEntry.name
+        : data.name.trim() || catalogEntry.name;
+    const category =
+      data.category === undefined
+        ? stored?.category ?? catalogEntry.category
+        : data.category.trim() || catalogEntry.category;
 
     const updated = await prisma.notationDefinition.upsert({
       where: { id: topicId },

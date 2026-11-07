@@ -175,6 +175,12 @@ export class AccountService {
         data: { username: newUsername },
       });
 
+      // Keep the released name from being claimed by someone else right away
+      // (impersonation of the just-renamed identity). The user may switch back.
+      if (oldUsername.toLowerCase() !== newUsername.toLowerCase()) {
+        await holdUsername(oldUsername, tx, userId);
+      }
+
       return updatedUser;
     });
 

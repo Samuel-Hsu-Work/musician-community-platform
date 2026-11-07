@@ -84,7 +84,7 @@ export const explainNotation = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in explainNotation controller:', error);
     return res.status(500).json({
-      error: error.message || 'Failed to generate explanation',
+      error: 'Failed to generate explanation',
     });
   }
 };
