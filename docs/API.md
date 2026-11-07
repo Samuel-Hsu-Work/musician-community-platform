@@ -18,8 +18,8 @@ Auth: send `Authorization: Bearer <jwt>` for protected routes.
 | Method | Path | Auth | Body |
 |--------|------|------|------|
 | GET | `/me` | ✓ | — | Returns `learningStyleCategoryIds: string[]` |
-| PATCH | `/username` | ✓ | `{ username }` |
-| PATCH | `/preferences` | ✓ | `{ language?, timezone? }` | `timezone` must be a valid IANA id (invalid values stored as `UTC`). After save, web client should call `setCachedTimezone` so Forum timestamps update via `musictalks:timezone-updated`. |
+| PATCH | `/username` | ✓ | `{ username }` | The previous name is held for 30 days; only this user can switch back to it during the hold |
+| PATCH | `/preferences` | ✓ | `{ language?, timezone? }` | `language` must be a language tag such as `en` or `zh-TW` (400 otherwise). `timezone` must be a valid IANA id (invalid values stored as `UTC`). After save, web client should call `setCachedTimezone` so Forum timestamps update via `musictalks:timezone-updated`. |
 | PATCH | `/learning-style` | ✓ | `{ categoryIds: string[] }` | Replaces Theory learning-style categories |
 | DELETE | `/` | ✓ | `{ password }` | Permanently deletes account; anonymizes forum content |
 
@@ -31,7 +31,7 @@ Account deletion: removes `User` + preferences + learning categories + all likes
 
 | Method | Path | Auth | Query / body |
 |--------|------|------|--------------|
-| GET | `/topic/latest` | optional | Latest `daily_discussion` topic |
+| GET | `/topic/latest` | optional | Latest visible (not hidden) `daily_discussion` topic |
 | GET | `/topics` | optional | `?type=…&page=1&limit=20&search=` — paginated; search title + content |
 | GET | `/topics/:topicId` | optional | Single topic (permalink) |
 | GET | `/topics/mine` | ✓ | `?page=1&limit=20&search=` — user's community posts |
@@ -44,9 +44,9 @@ Account deletion: removes `User` + preferences + learning categories + all likes
 
 | Method | Path | Auth | Query / body |
 |--------|------|------|--------------|
-| GET | `/comments` | optional | `?topicId=<id>&page=1&limit=20` — top-level + nested replies |
+| GET | `/comments` | optional | `?topicId=<id>&page=1&limit=20` — top-level + nested replies; 404 if the topic does not exist or is hidden |
 | POST | `/comments` | ✓ | `{ topicId, text, parentId? }` — reply via `parentId` |
-| PATCH | `/comments/:commentId` | ✓ | `{ text }` — own comments only |
+| PATCH | `/comments/:commentId` | ✓ | `{ text }` — own comments only; response includes the comment's replies |
 | DELETE | `/comments/:commentId` | ✓ | Own only; cascades replies |
 | POST | `/comments/:commentId/like` | ✓ | Toggle — not on own comment |
 
@@ -101,7 +101,7 @@ Requires `Authorization: Bearer <token>` and `User.role = admin`.
 | PATCH | `/users/:id` | Body: `{ role: "user" \| "admin" }` |
 | GET | `/theory/topics?domainId=&search=` | List catalog topics + DB status |
 | GET | `/theory/topics/:id` | Topic detail for content management editor |
-| PATCH | `/theory/topics/:id` | Body: `{ name?, category?, standardDefinition }` |
+| PATCH | `/theory/topics/:id` | Body: `{ name?, category?, standardDefinition }` — omitted `name`/`category` keep their stored value; blank ones reset to the catalog default |
 
 Bootstrap admin: set `ADMIN_EMAIL` in backend `.env`, then `npm run prisma:seed`. User must re-login for JWT role.
 

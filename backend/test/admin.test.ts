@@ -508,6 +508,37 @@ describe('theory standard definitions', () => {
     expect(res.body.topic).toMatchObject({ name: 'Accent', category: 'articulation' });
   });
 
+  it('keeps a customized name and category when an edit leaves them out', async () => {
+    const customized = await editTopic('tie', {
+      name: 'Tie (custom)',
+      category: 'custom-category',
+      standardDefinition: 'First version.',
+    });
+    expect(customized.status).toBe(200);
+
+    const res = await editTopic('tie', { standardDefinition: 'Second version.' });
+
+    expect(res.status).toBe(200);
+    expect(await definitionOf('tie')).toMatchObject({
+      name: 'Tie (custom)',
+      category: 'custom-category',
+      standardDefinition: 'Second version.',
+    });
+  });
+
+  it.each([
+    { field: 'name', body: { name: 42, standardDefinition: 'Valid text.' } },
+    { field: 'category', body: { category: ['notation'], standardDefinition: 'Valid text.' } },
+    { field: 'standardDefinition', body: { standardDefinition: { text: 'nested' } } },
+  ])('rejects a non-string $field with 400 and keeps the stored definition', async ({ body }) => {
+    const before = await definitionOf('coda');
+
+    const res = await editTopic('coda', body);
+
+    expect(res.status).toBe(400);
+    expect(await definitionOf('coda')).toEqual(before);
+  });
+
   it('rejects an edit without a standard definition and keeps the stored one', async () => {
     const before = await definitionOf('fermata');
 

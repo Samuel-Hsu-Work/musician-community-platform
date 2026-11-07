@@ -178,6 +178,55 @@ describe('changing the username', () => {
     expect((await login(user)).status).toBe(401);
   });
 
+  it('holds the previous name after a rename so nobody else can claim it, regardless of capitalization', async () => {
+    const renamer = await registerUser();
+    const claimant = await registerUser();
+    const previousName = renamer.username;
+    expect((await changeUsername(renamer, uniqueUsername('renamed'))).status).toBe(200);
+
+    const rename = await changeUsername(claimant, previousName.toUpperCase());
+    const registration = await client()
+      .post('/api/auth/register')
+      .send({
+        username: previousName,
+        email: `${uniqueUsername('claimant')}@example.test`,
+        password: VALID_PASSWORD,
+      });
+
+    expect(rename.status).toBe(400);
+    expect(rename.body.error).toBe('This username is not available');
+    expect(registration.status).toBe(409);
+    expect(await storedUsername(claimant.id)).toBe(claimant.username);
+    expect(
+      await prisma.user.count({ where: { username: { equals: previousName, mode: 'insensitive' } } })
+    ).toBe(0);
+  });
+
+  it('lets the user switch back to their own previous name during the hold', async () => {
+    const user = await registerUser();
+    const previousName = user.username;
+    const first = await changeUsername(user, uniqueUsername('renamed'));
+    expect(first.status).toBe(200);
+
+    const back = await changeUsername({ token: first.body.token }, previousName);
+
+    expect(back.status).toBe(200);
+    expect(await storedUsername(user.id)).toBe(previousName);
+  });
+
+  it('attributes posts and comments made with a token issued before a rename to the current name', async () => {
+    // A token issued before the rename may still be in use on another device.
+    const user = await registerUser();
+    const newName = uniqueUsername('renamed');
+    expect((await changeUsername(user, newName)).status).toBe(200);
+
+    const post = await createCommunityPost(user);
+    const comment = await createComment(user, post.id, 'Posted with the old token');
+
+    expect((await fetchTopic(post.id)).authorUsername).toBe(newName);
+    expect((await fetchCommentsById(post.id)).get(comment.id)?.username).toBe(newName);
+  });
+
   it("shows the new name on the user's existing posts, comments and replies, leaving other authors untouched", async () => {
     const user = await registerUser();
     const other = await registerUser();
@@ -302,6 +351,23 @@ describe('preferences', () => {
       language: 'ja',
       timezone: 'Asia/Tokyo',
     });
+  });
+
+  it.each([
+    { reason: 'not a string', language: 123 },
+    { reason: 'not a language tag', language: 'english please' },
+    { reason: 'absurdly long', language: `en-${'x'.repeat(60)}` },
+  ])('rejects a language that is $reason and keeps the stored one', async ({ language }) => {
+    const user = await registerUser();
+    await client().patch('/api/account/preferences').set(...bearer(user)).send({ language: 'ja' });
+
+    const res = await client()
+      .patch('/api/account/preferences')
+      .set(...bearer(user))
+      .send({ language });
+
+    expect(res.status).toBe(400);
+    expect((await fetchAccount(user)).body.preferences.language).toBe('ja');
   });
 
   it('stores UTC when the timezone is not a valid IANA zone', async () => {

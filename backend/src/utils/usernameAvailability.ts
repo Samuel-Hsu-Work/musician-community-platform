@@ -27,28 +27,48 @@ export function getUsernameHoldUntil(from = new Date()): Date {
   return heldUntil;
 }
 
+/**
+ * Blocks a released username from being claimed for USERNAME_HOLD_DAYS, so nobody can
+ * impersonate the previous owner. Pass `releasedByUserId` when the owner renamed
+ * away from it (they may switch back); omit it when the account was deleted.
+ */
 export async function holdUsername(
   username: string,
-  tx?: PrismaTx
+  tx?: PrismaTx,
+  releasedByUserId?: string
 ): Promise<void> {
   const client = tx ?? prisma;
   const usernameLower = normalizeUsername(username).toLowerCase();
   const heldUntil = getUsernameHoldUntil();
+  const releasedBy = releasedByUserId ?? null;
 
   await client.usernameHold.upsert({
     where: { usernameLower },
-    create: { usernameLower, heldUntil },
-    update: { heldUntil },
+    create: { usernameLower, heldUntil, releasedByUserId: releasedBy },
+    update: { heldUntil, releasedByUserId: releasedBy },
   });
 }
 
-export async function assertUsernameNotHeld(username: string): Promise<void> {
+/** Holds that block `claimantUserId` (a user is never blocked by a name they released). */
+function activeHoldsBlocking(claimantUserId?: string) {
+  return {
+    heldUntil: { gt: new Date() },
+    ...(claimantUserId
+      ? { OR: [{ releasedByUserId: null }, { NOT: { releasedByUserId: claimantUserId } }] }
+      : {}),
+  };
+}
+
+export async function assertUsernameNotHeld(
+  username: string,
+  claimantUserId?: string
+): Promise<void> {
   const usernameLower = normalizeUsername(username).toLowerCase();
-  const hold = await prisma.usernameHold.findUnique({
-    where: { usernameLower },
+  const hold = await prisma.usernameHold.findFirst({
+    where: { usernameLower, ...activeHoldsBlocking(claimantUserId) },
   });
 
-  if (hold && hold.heldUntil > new Date()) {
+  if (hold) {
     throw new Error(USERNAME_HELD_ERROR);
   }
 }
@@ -65,7 +85,7 @@ export async function assertUsernameNotTooSimilar(
       select: { username: true },
     }),
     prisma.usernameHold.findMany({
-      where: { heldUntil: { gt: new Date() } },
+      where: activeHoldsBlocking(excludeUserId),
       select: { usernameLower: true },
     }),
   ]);
@@ -86,6 +106,6 @@ export async function assertUsernameAvailable(
   username: string,
   excludeUserId?: string
 ): Promise<void> {
-  await assertUsernameNotHeld(username);
+  await assertUsernameNotHeld(username, excludeUserId);
   await assertUsernameNotTooSimilar(username, excludeUserId);
 }

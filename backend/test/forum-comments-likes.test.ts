@@ -327,6 +327,25 @@ describe('editing comments', () => {
     expect(stored.text).toBe('Edited');
   });
 
+  it("keeps a top-level comment's replies in the edit response", async () => {
+    // The forum page replaces the edited comment with this object, so empty replies
+    // would make the thread disappear until the page is reloaded.
+    const author = await registerUser();
+    const replier = await registerUser();
+    const topic = await createCommunityPost(author);
+    const comment = await createComment(author, topic.id, 'Original');
+    const reply = await createComment(replier, topic.id, 'A reply', comment.id);
+
+    const res = await client()
+      .patch(`/api/forum/comments/${comment.id}`)
+      .set(...bearer(author))
+      .send({ text: 'Edited' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.comment.replies.map((r: ListedComment) => r.id)).toEqual([reply.id]);
+    expect(res.body.comment.replies[0]).toMatchObject({ text: 'A reply', username: replier.username });
+  });
+
   it('rejects an edit by a non-author and leaves the comment unchanged', async () => {
     const author = await registerUser();
     const intruder = await registerUser();
@@ -530,5 +549,52 @@ describe('like access rules', () => {
     expect(neighbourLike.status).toBe(200);
     const likers = await prisma.topicLike.findMany({ where: { topicId: topic.id } });
     expect(likers.map((l) => l.userId)).toEqual([neighbour.id]);
+  });
+});
+
+describe('hidden (moderated) topics', () => {
+  async function arrangeHiddenThread() {
+    const author = await registerUser();
+    const commenter = await registerUser();
+    const topic = await createCommunityPost(author);
+    const comment = await createComment(commenter, topic.id, 'Visible before moderation');
+    await prisma.topic.update({ where: { id: topic.id }, data: { hidden: true } });
+    return { author, commenter, topic, comment };
+  }
+
+  it('does not let guests or members read the comments of a hidden topic', async () => {
+    const { topic, commenter } = await arrangeHiddenThread();
+
+    const asGuest = await listComments(topic.id);
+    const asCommenter = await listComments(topic.id, commenter);
+
+    expect(asGuest.status).toBe(404);
+    expect(asCommenter.status).toBe(404);
+    expect(asGuest.body.comments).toBeUndefined();
+  });
+
+  it('rejects new comments and replies on a hidden topic without storing them', async () => {
+    const { topic, comment } = await arrangeHiddenThread();
+    const member = await registerUser();
+
+    const topLevel = await postComment(member, { topicId: topic.id, text: 'Still here?' });
+    const reply = await postComment(member, { topicId: topic.id, text: 'Reply', parentId: comment.id });
+
+    expect(topLevel.status).toBe(404);
+    expect(reply.status).toBe(404);
+    expect(await prisma.comment.count({ where: { topicId: topic.id } })).toBe(1);
+  });
+
+  it('rejects likes on a hidden topic and on its comments without storing them', async () => {
+    const { topic, comment } = await arrangeHiddenThread();
+    const member = await registerUser();
+
+    const topicLike = await likeTopic(member, topic.id);
+    const commentLike = await likeComment(member, comment.id);
+
+    expect(topicLike.status).toBe(404);
+    expect(commentLike.status).toBe(404);
+    expect(await prisma.topicLike.count({ where: { topicId: topic.id } })).toBe(0);
+    expect(await prisma.commentLike.count({ where: { commentId: comment.id } })).toBe(0);
   });
 });

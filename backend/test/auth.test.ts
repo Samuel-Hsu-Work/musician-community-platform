@@ -255,6 +255,36 @@ describe('login', () => {
   });
 });
 
+describe('non-string credentials', () => {
+  it.each([
+    { field: 'username', value: 12345 },
+    { field: 'email', value: ['someone@example.test'] },
+    { field: 'password', value: { secret: true } },
+  ])('rejects a registration whose $field is not a string with 400', async ({ field, value }) => {
+    const username = uniqueUsername();
+    const body = {
+      username,
+      email: `${username}@example.test`,
+      password: VALID_PASSWORD,
+      [field]: value,
+    };
+
+    const res = await client().post('/api/auth/register').send(body);
+
+    expect(res.status).toBe(400);
+    expect(await prisma.user.count({ where: { email: `${username}@example.test` } })).toBe(0);
+  });
+
+  it.each([
+    { field: 'username', value: 123 },
+    { field: 'email', value: ['someone@example.test'] },
+  ])('rejects an availability check whose $field is not a string with 400', async ({ field, value }) => {
+    const res = await client().post('/api/auth/check-availability').send({ [field]: value });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('availability check', () => {
   it('rejects a request that names neither a username nor an email', async () => {
     const res = await client().post('/api/auth/check-availability').send({});

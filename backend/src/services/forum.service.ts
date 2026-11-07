@@ -131,11 +131,37 @@ async function getLikedCommentIds(userId: string, commentIds: string[]) {
   return new Set(likes.map((l) => l.commentId));
 }
 
+/**
+ * Hidden (moderated) topics behave as if they did not exist on public paths: their
+ * comments cannot be read, and nobody can comment on or like them.
+ */
+async function assertTopicVisible(topicId: string) {
+  const topic = await prisma.topic.findUnique({ where: { id: topicId } });
+  if (!topic || topic.hidden) {
+    throw new Error('Topic not found');
+  }
+  return topic;
+}
+
+/** Author name for new content, read from the account rather than a possibly stale token. */
+async function currentUsername(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true },
+  });
+  if (!user) {
+    throw new Error('User not found');
+  }
+  return user.username;
+}
+
+const COMMENT_INCLUDE = { _count: { select: { likes: true } } } as const;
+
 export class ForumService {
-  /** Latest AI-generated daily discussion topic */
+  /** Latest visible AI-generated daily discussion topic */
   async getLatestDiscussionTopic() {
     return prisma.topic.findFirst({
-      where: { type: 'daily_discussion' },
+      where: { type: 'daily_discussion', hidden: false },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -209,6 +235,8 @@ export class ForumService {
     userId?: string,
     options: { page?: number; limit?: number } = {}
   ) {
+    await assertTopicVisible(topicId);
+
     const page = options.page ?? 1;
     const limit = options.limit ?? DEFAULT_COMMENT_PAGE_SIZE;
     const skip = (page - 1) * limit;
@@ -269,17 +297,11 @@ export class ForumService {
   async createComment(
     topicId: string,
     userId: string,
-    username: string,
     text: string,
     parentId?: string
   ) {
-    const topic = await prisma.topic.findUnique({
-      where: { id: topicId },
-    });
-
-    if (!topic) {
-      throw new Error('Topic not found');
-    }
+    const username = await currentUsername(userId);
+    await assertTopicVisible(topicId);
 
     if (parentId) {
       const parent = await prisma.comment.findUnique({
@@ -299,11 +321,11 @@ export class ForumService {
       data: {
         topicId,
         userId,
-        username: username.trim(),
+        username,
         text: text.trim(),
         parentId: parentId ?? null,
       },
-      include: { _count: { select: { likes: true } } },
+      include: COMMENT_INCLUDE,
     });
 
     return formatComment(comment, false);
@@ -333,14 +355,29 @@ export class ForumService {
         text: text.trim(),
         userId: comment.userId ?? userId,
       },
-      include: { _count: { select: { likes: true } } },
+      include: COMMENT_INCLUDE,
     });
 
-    const likedByUser = await prisma.commentLike.findUnique({
-      where: { commentId_userId: { commentId, userId } },
-    });
+    // Return the thread as the comment list shows it, so a client can swap the
+    // edited comment in place without losing its replies.
+    const replies =
+      updated.parentId === null
+        ? await prisma.comment.findMany({
+            where: { parentId: commentId },
+            orderBy: { createdAt: 'asc' },
+            include: COMMENT_INCLUDE,
+          })
+        : [];
+    const likedCommentIds = await getLikedCommentIds(userId, [
+      commentId,
+      ...replies.map((reply) => reply.id),
+    ]);
 
-    return formatComment(updated, !!likedByUser);
+    return formatComment(
+      updated,
+      likedCommentIds.has(commentId),
+      replies.map((reply) => formatComment(reply, likedCommentIds.has(reply.id)))
+    );
   }
 
   async deleteComment(commentId: string, userId: string, username: string) {
@@ -359,12 +396,8 @@ export class ForumService {
     await prisma.comment.delete({ where: { id: commentId } });
   }
 
-  async createUserTopic(
-    userId: string,
-    authorUsername: string,
-    title: string,
-    content: string
-  ) {
+  async createUserTopic(userId: string, title: string, content: string) {
+    const authorUsername = await currentUsername(userId);
     const prefs = await prisma.userPreferences.findUnique({
       where: { userId },
       select: { timezone: true },
@@ -381,7 +414,7 @@ export class ForumService {
         content: content.trim(),
         type: 'community_post',
         userId,
-        authorUsername: authorUsername.trim(),
+        authorUsername,
       },
       include: { _count: { select: { likes: true } } },
     });
@@ -476,13 +509,7 @@ export class ForumService {
   }
 
   async toggleTopicLike(topicId: string, userId: string) {
-    const topic = await prisma.topic.findUnique({
-      where: { id: topicId },
-    });
-
-    if (!topic) {
-      throw new Error('Topic not found');
-    }
+    const topic = await assertTopicVisible(topicId);
 
     if (topic.type !== 'community_post') {
       throw new Error('Likes are only available on community posts');
@@ -517,9 +544,10 @@ export class ForumService {
   ) {
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
+      include: { topic: { select: { hidden: true } } },
     });
 
-    if (!comment) {
+    if (!comment || comment.topic.hidden) {
       throw new Error('Comment not found');
     }
 

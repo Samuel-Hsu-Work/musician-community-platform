@@ -33,7 +33,7 @@ User
 
 **Similarity:** New or changed usernames must differ from every existing username by **more than 1 edit** (Levenshtein distance &gt; 1, case-insensitive). Blocks near-duplicate names like `john` / `jon`, but allows names like `Tester01` and `Tester404`. Error message: `Please choose a more distinct username`.
 
-**Username hold:** After account deletion, the former username is reserved in `username_holds` for **30 days** (case-insensitive) before it can be registered again.
+**Username hold:** After account deletion or a username change, the former username is reserved in `username_holds` for **30 days** (case-insensitive) so nobody can impersonate its previous owner. For a rename, `releasedByUserId` records who released it, and that user alone may switch back during the hold.
 
 **Account deletion:** `DELETE /api/account` removes PII (user row, preferences, likes). Community posts and comments are **retained** with `authorUsername` / `username` set to `This account no longer exists` and `userId` cleared (tombstone / anonymization).
 

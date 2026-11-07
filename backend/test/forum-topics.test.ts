@@ -250,6 +250,23 @@ describe('latest daily discussion', () => {
     expect(res.body.topic).toMatchObject({ id: latest.id, type: 'daily_discussion' });
   });
 
+  it('skips a daily discussion that a moderator has hidden', async () => {
+    const visible = await arrangeTopic({
+      type: 'daily_discussion',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    await arrangeTopic({
+      type: 'daily_discussion',
+      hidden: true,
+      createdAt: new Date('2026-01-02T00:00:00Z'),
+    });
+
+    const res = await client().get('/api/forum/topic/latest');
+
+    expect(res.status).toBe(200);
+    expect(res.body.topic).toMatchObject({ id: visible.id });
+  });
+
   it('returns a null topic rather than an error when no discussion exists yet', async () => {
     await arrangeTopic({ type: 'community_post' });
 

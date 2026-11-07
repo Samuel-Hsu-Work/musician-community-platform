@@ -2,6 +2,13 @@ import { Request, Response } from 'express';
 import { accountService } from '../services/account.service';
 import { USERNAME_TOO_SIMILAR_ERROR, USERNAME_HELD_ERROR } from '../utils/usernameAvailability';
 
+/** BCP 47-style tag ("en", "zh-TW", "es-419"); the column is free text, so cap its shape. */
+const LANGUAGE_TAG_PATTERN = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/;
+
+function isLanguageTag(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 35 && LANGUAGE_TAG_PATTERN.test(value);
+}
+
 export const getAccount = async (req: Request, res: Response) => {
   try {
     if (!req.user?.userId) {
@@ -63,6 +70,16 @@ export const updatePreferences = async (req: Request, res: Response) => {
     }
 
     const { language, timezone } = req.body;
+
+    if (language !== undefined && !isLanguageTag(language)) {
+      return res.status(400).json({
+        error: 'Language must be a language tag such as "en" or "zh-TW"',
+      });
+    }
+
+    if (timezone !== undefined && typeof timezone !== 'string') {
+      return res.status(400).json({ error: 'Timezone must be a string' });
+    }
 
     const preferences = await accountService.updatePreferences(req.user.userId, {
       language,
